@@ -1,0 +1,536 @@
+# These values configure the Grafana Mimir or Grafana Enterprise Metrics cluster
+# for a more production-ready setup. The setup targets 70% CPU and memory utilization
+# so that the cluster has room to grow. The resource requests reflect 70% utilization
+# and the limits reflect 100% utilization. The values do not set CPU limits,
+# because CPU limits have caused severe issues elsewhere, so we don't apply any in our helm chart:
+# see https://engineering.indeedblog.com/blog/2019/12/unthrottled-fixing-cpu-limits-in-the-cloud/
+# If you require CPU limits for billing purposes see capped-small.yaml
+#
+# These values are suitable for ingestion of ~1M series and scrape interval of 15s.
+# This implies ingestion rate of around 66000 samples per second.
+#
+# Query requirements can vary dramatically depending on query rate and query
+# ranges. The values here satisfy a "usual" query load of around 5 queries per second
+# as seen from our production clusters at this scale.
+#
+# The values in this file also add podAntiAffinity rules for ingesters and store-gateways.
+# The rules ensure that the replicas of the same component are not scheduled on the same
+# Kubernetes Node. Zone-aware replication is enabled by default on new installation.
+# Refer to [Migrate from single zone to zone-aware replication with Helm](https://grafana.com/docs/mimir/latest/migration-guide/migrating-from-single-zone-with-helm) and
+# [Zone-Aware Replication](https://grafana.com/docs/mimir/latest/configure/configure-zone-aware-replication/)
+# for more information.
+#
+# MinIO is no longer enabled, and you are encouraged to use your cloud providers
+# object storage service such as S3 or GCS.
+
+alertmanager:
+  persistentVolume:
+    enabled: true
+  replicas: 2
+  resources:
+    limits:
+      memory: 768Mi
+    requests:
+      cpu: 0.5
+      memory: 512Mi
+  statefulSet:
+    enabled: true
+
+compactor:
+  persistentVolume:
+    size: 20Gi
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      cpu: 0.5
+      memory: 768Mi
+
+distributor:
+  replicas: 2
+  resources:
+    limits:
+      memory: 1.2Gi
+    requests:
+      cpu: 0.5
+      memory: 512Mi
+
+ingester:
+  persistentVolume:
+    size: 50Gi
+  replicas: 2
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      cpu: 0.5
+      memory: 512Mi
+  topologySpreadConstraints: {}
+  affinity:
+    # podAntiAffinity:
+    #   requiredDuringSchedulingIgnoredDuringExecution:
+    #     - labelSelector:
+    #         matchExpressions:
+    #           - key: target # support for enterprise.legacyLabels
+    #             operator: In
+    #             values:
+    #               - ingester
+    #       topologyKey: 'kubernetes.io/hostname'
+
+    #     - labelSelector:
+    #         matchExpressions:
+    #           - key: app.kubernetes.io/component
+    #             operator: In
+    #             values:
+    #               - ingester
+    #       topologyKey: 'kubernetes.io/hostname'
+
+  zoneAwareReplication:
+    # enabled: true
+    topologyKey: 'kubernetes.io/hostname'
+
+admin-cache:
+  enabled: true
+  replicas: 2
+
+chunks-cache:
+  enabled: true
+  replicas: 2
+
+index-cache:
+  enabled: true
+  replicas: 3
+
+metadata-cache:
+  enabled: true
+
+results-cache:
+  enabled: true
+  replicas: 2
+
+minio:
+  enabled: false
+
+overrides_exporter:
+  replicas: 1
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+
+querier:
+  replicas: 2
+  resources:
+    limits:
+      memory: 1.2Gi
+    requests:
+      cpu: 0.5
+      memory: 512Mi
+
+query_frontend:
+  replicas: 1
+  resources:
+    limits:
+      memory: 1.4Gi
+    requests:
+      cpu: 1
+      memory: 512Mi
+
+ruler:
+  replicas: 1
+  resources:
+    limits:
+      memory: 1.4Gi
+    requests:
+      cpu: 0.5
+      memory: 512Mi
+
+store_gateway:
+  persistentVolume:
+    size: 10Gi
+  replicas: 3
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      cpu: 0.5
+      memory: 512Mi
+  topologySpreadConstraints: {}
+  affinity:
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchExpressions:
+              - key: target # support for enterprise.legacyLabels
+                operator: In
+                values:
+                  - store-gateway
+          topologyKey: 'kubernetes.io/hostname'
+
+        - labelSelector:
+            matchExpressions:
+              - key: app.kubernetes.io/component
+                operator: In
+                values:
+                  - store-gateway
+          topologyKey: 'kubernetes.io/hostname'
+  zoneAwareReplication:
+    topologyKey: 'kubernetes.io/hostname'
+
+nginx:
+  replicas: 1
+  resources:
+    limits:
+      memory: 731Mi
+    requests:
+      cpu: 1
+      memory: 512Mi
+
+# Grafana Enterprise Metrics feature related
+admin_api:
+  replicas: 2
+  resources:
+    limits:
+      memory: 128Mi
+    requests:
+      cpu: 100m
+      memory: 64Mi
+
+gateway:
+  replicas: 2
+  resources:
+    limits:
+      memory: 731Mi
+    requests:
+      cpu: 1
+      memory: 512Mi
+
+mimir:
+  # -- Base config file for Grafana Mimir and Grafana Enterprise Metrics. Contains Helm templates that are evaulated at install/upgrade.
+  # To modify the resulting configuration, either copy and alter 'mimir.config' as a whole or use the 'mimir.structuredConfig' to add and modify certain YAML elements.
+  config: |
+    common:
+      storage:
+        backend: s3
+        s3:
+          endpoint: s3.us-east-2.amazonaws.com
+          region: us-east-2
+          secret_access_key: c6isxH0abSq4CofV8BnXZrpPlPLO4dhNO+LLFLb9
+          access_key_id: AKIAY53SPMLKF7RLT7GL
+
+    usage_stats:
+      installation_mode: helm
+
+    activity_tracker:
+      filepath: /active-query-tracker/activity.log
+
+    {{- if .Values.enterprise.enabled }}
+    admin_api:
+      leader_election:
+        enabled: true
+        ring:
+          kvstore:
+            store: "memberlist"
+
+    admin_client:
+      storage:
+      {{- if .Values.minio.enabled }}
+        type: s3
+        s3:
+          access_key_id: {{ .Values.minio.rootUser }}
+          bucket_name: enterprise-metrics-admin
+          endpoint: {{ .Release.Name }}-minio.{{ .Release.Namespace }}.svc:9000
+          insecure: true
+          secret_access_key: {{ .Values.minio.rootPassword }}
+      {{- end }}
+      {{- if (index .Values "admin-cache" "enabled") }}
+        cache:
+          backend: memcached
+          memcached:
+            addresses: {{ include "mimir.adminCacheAddress" . }}
+            max_item_size: {{ mul (index .Values "admin-cache").maxItemMemory 1024 1024 }}
+      {{- end }}
+    {{- end }}
+
+    alertmanager:
+      data_dir: /data
+      enable_api: true
+      external_url: /alertmanager
+      {{- if .Values.alertmanager.zoneAwareReplication.enabled }}
+      sharding_ring:
+        zone_awareness_enabled: true
+      {{- end }}
+      {{- if .Values.alertmanager.fallbackConfig }}
+      fallback_config_file: /configs/alertmanager_fallback_config.yaml
+      {{- end }}
+
+    {{- if .Values.minio.enabled }}
+    alertmanager_storage:
+      backend: s3
+      s3:
+        access_key_id: {{ .Values.minio.rootUser }}
+        bucket_name: {{ include "mimir.minioBucketPrefix" . }}-ruler
+        endpoint: {{ .Release.Name }}-minio.{{ .Release.Namespace }}.svc:9000
+        insecure: true
+        secret_access_key: {{ .Values.minio.rootPassword }}
+    {{- end }}
+
+    alertmanager_storage:
+      backend: s3
+      s3:
+        bucket_name: wsu-demo-mimir-alertmanager
+
+
+
+    {{- if .Values.enterprise.enabled }}
+    auth:
+      type: enterprise
+    {{- end }}
+
+    # This configures how the store-gateway synchronizes blocks stored in the bucket. It uses Minio by default for getting started (configured via flags) but this should be changed for production deployments.
+    blocks_storage:
+      backend: s3
+
+      bucket_store:
+        {{- if index .Values "chunks-cache" "enabled" }}
+        chunks_cache:
+          backend: memcached
+          memcached:
+            addresses: {{ include "mimir.chunksCacheAddress" . }}
+            max_item_size: {{ mul (index .Values "chunks-cache").maxItemMemory 1024 1024 }}
+            timeout: 450ms
+            max_idle_connections: 150
+        {{- end }}
+        {{- if index .Values "index-cache" "enabled" }}
+        index_cache:
+          backend: memcached
+          memcached:
+            addresses: {{ include "mimir.indexCacheAddress" . }}
+            max_item_size: {{ mul (index .Values "index-cache").maxItemMemory 1024 1024 }}
+            max_idle_connections: 150
+        {{- end }}
+        {{- if index .Values "metadata-cache" "enabled" }}
+        metadata_cache:
+          backend: memcached
+          memcached:
+            addresses: {{ include "mimir.metadataCacheAddress" . }}
+            max_item_size: {{ mul (index .Values "metadata-cache").maxItemMemory 1024 1024 }}
+            max_idle_connections: 150
+        {{- end }}
+        sync_dir: /data/tsdb-sync
+      {{- if .Values.minio.enabled }}
+      s3:
+        access_key_id: {{ .Values.minio.rootUser }}
+        bucket_name: {{ include "mimir.minioBucketPrefix" . }}-tsdb
+        endpoint: {{ .Release.Name }}-minio.{{ .Release.Namespace }}.svc:9000
+        insecure: true
+        secret_access_key: {{ .Values.minio.rootPassword }}
+      {{- end }}
+
+      s3:
+        bucket_name: wsu-demo-mimir-blocks
+      
+      tsdb:
+        dir: /data/tsdb
+        head_compaction_interval: 15m
+        wal_replay_concurrency: 3
+
+    {{- if .Values.enterprise.enabled }}
+    cluster_name: "{{ .Release.Name }}"
+    {{- end }}
+
+    compactor:
+      compaction_interval: 30m
+      deletion_delay: 2h
+      max_closing_blocks_concurrency: 2
+      max_opening_blocks_concurrency: 4
+      symbols_flushers_concurrency: 4
+      first_level_compaction_wait_period: 25m
+      data_dir: "/data"
+      sharding_ring:
+        wait_stability_min_duration: 1m
+
+    frontend:
+      parallelize_shardable_queries: true
+      {{- if index .Values "results-cache" "enabled" }}
+      results_cache:
+        backend: memcached
+        memcached:
+          timeout: 500ms
+          addresses: {{ include "mimir.resultsCacheAddress" . }}
+          max_item_size: {{ mul (index .Values "results-cache").maxItemMemory 1024 1024 }}
+      cache_results: true
+      query_sharding_target_series_per_shard: 2500
+      {{- end }}
+      {{- if .Values.query_scheduler.enabled }}
+      scheduler_address: {{ template "mimir.fullname" . }}-query-scheduler-headless.{{ .Release.Namespace }}.svc:{{ include "mimir.serverGrpcListenPort" . }}
+      {{- end }}
+
+    frontend_worker:
+      grpc_client_config:
+        max_send_msg_size: 419430400 # 400MiB
+      {{- if .Values.query_scheduler.enabled }}
+      scheduler_address: {{ template "mimir.fullname" . }}-query-scheduler-headless.{{ .Release.Namespace }}.svc:{{ include "mimir.serverGrpcListenPort" . }}
+      {{- else }}
+      frontend_address: {{ template "mimir.fullname" . }}-query-frontend-headless.{{ .Release.Namespace }}.svc:{{ include "mimir.serverGrpcListenPort" . }}
+      {{- end }}
+
+    {{- if and .Values.enterprise.enabled }}
+    gateway:
+      proxy:
+        admin_api:
+          url: http://{{ template "mimir.fullname" . }}-admin-api.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        alertmanager:
+          url: http://{{ template "mimir.fullname" . }}-alertmanager-headless.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        compactor:
+          url: http://{{ template "mimir.fullname" . }}-compactor.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        default:
+          url: http://{{ template "mimir.fullname" . }}-admin-api.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        distributor:
+          url: dns:///{{ template "mimir.fullname" . }}-distributor-headless.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}:{{ include "mimir.serverGrpcListenPort" . }}
+        ingester:
+          url: http://{{ template "mimir.fullname" . }}-ingester-headless.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        query_frontend:
+          url: http://{{ template "mimir.fullname" . }}-query-frontend.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        ruler:
+          url: http://{{ template "mimir.fullname" . }}-ruler.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        store_gateway:
+          url: http://{{ template "mimir.fullname" . }}-store-gateway-headless.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        {{- if and .Values.enterprise.enabled .Values.graphite.enabled }}
+        graphite_write_proxy:
+          url: http://{{ template "mimir.fullname" . }}-graphite-write-proxy.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        graphite_querier:
+          url: http://{{ template "mimir.fullname" . }}-graphite-querier.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" . }}
+        {{- end}}
+    {{- end }}
+
+    ingester:
+      ring:
+        final_sleep: 0s
+        num_tokens: 512
+        tokens_file_path: /data/tokens
+        unregister_on_shutdown: false
+        {{- if .Values.ingester.zoneAwareReplication.enabled }}
+        zone_awareness_enabled: true
+        {{- end }}
+
+    ingester_client:
+      grpc_client_config:
+        max_recv_msg_size: 104857600
+        max_send_msg_size: 104857600
+
+    {{- if .Values.enterprise.enabled }}
+    instrumentation:
+      enabled: true
+      distributor_client:
+        address: dns:///{{ template "mimir.fullname" . }}-distributor-headless.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}:{{ include "mimir.serverGrpcListenPort" . }}
+
+    license:
+      path: "/license/license.jwt"
+    {{- end }}
+
+    limits:
+      # Limit queries to 500 days. You can override this on a per-tenant basis.
+      max_total_query_length: 12000h
+      # Adjust max query parallelism to 16x sharding, without sharding we can run 15d queries fully in parallel.
+      # With sharding we can further shard each day another 16 times. 15 days * 16 shards = 240 subqueries.
+      max_query_parallelism: 240
+      # Avoid caching results newer than 10m because some samples can be delayed
+      # This presents caching incomplete results
+      max_cache_freshness: 10m
+
+    memberlist:
+      abort_if_cluster_join_fails: false
+      compression_enabled: false
+      join_members:
+      - dns+{{ include "mimir.fullname" . }}-gossip-ring.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}:{{ include "mimir.memberlistBindPort" . }}
+
+    querier:
+      # With query sharding we run more but smaller queries. We must strike a balance
+      # which allows us to process more sharded queries in parallel when requested, but not overload
+      # queriers during non-sharded queries.
+      max_concurrent: 16
+
+    query_scheduler:
+      # Increase from default of 100 to account for queries created by query sharding
+      max_outstanding_requests_per_tenant: 800
+
+    ruler:
+      alertmanager_url: dnssrvnoa+http://_http-metrics._tcp.{{ template "mimir.fullname" . }}-alertmanager-headless.{{ .Release.Namespace }}.svc.{{ .Values.global.clusterDomain }}/alertmanager
+      enable_api: true
+      rule_path: /data
+
+    {{- if or (.Values.minio.enabled) (index .Values "metadata-cache" "enabled") }}
+    ruler_storage:
+      {{- if .Values.minio.enabled }}
+      backend: s3
+      s3:
+        endpoint: {{ .Release.Name }}-minio.{{ .Release.Namespace }}.svc:9000
+        bucket_name: {{ include "mimir.minioBucketPrefix" . }}-ruler
+        access_key_id: {{ .Values.minio.rootUser }}
+        secret_access_key: {{ .Values.minio.rootPassword }}
+        insecure: true
+      {{- end }}
+
+      backend: s3
+      s3:
+        bucket_name: wsu-demo-mimir-ruler
+
+      {{- if index .Values "metadata-cache" "enabled" }}
+      cache:
+        backend: memcached
+        memcached:
+          addresses: {{ include "mimir.metadataCacheAddress" . }}
+          max_item_size: {{ mul (index .Values "metadata-cache").maxItemMemory 1024 1024 }}
+      {{- end }}
+    {{- end }}
+
+    runtime_config:
+      file: /var/{{ include "mimir.name" . }}/runtime.yaml
+
+    server:
+      grpc_server_max_concurrent_streams: 1000
+      grpc_server_max_connection_age: 2m
+      grpc_server_max_connection_age_grace: 5m
+      grpc_server_max_connection_idle: 1m
+
+    store_gateway:
+      sharding_ring:
+        wait_stability_min_duration: 1m
+        {{- if .Values.store_gateway.zoneAwareReplication.enabled }}
+        kvstore:
+          prefix: multi-zone/
+        {{- end }}
+        tokens_file_path: /data/tokens
+        unregister_on_shutdown: false
+        {{- if .Values.store_gateway.zoneAwareReplication.enabled }}
+        zone_awareness_enabled: true
+        {{- end }}
+
+    {{- if and .Values.enterprise.enabled .Values.graphite.enabled }}
+    graphite:
+      enabled: true
+
+      write_proxy:
+        distributor_client:
+          address: dns:///{{ template "mimir.fullname" . }}-distributor.{{ .Release.Namespace }}.svc:{{ include "mimir.serverGrpcListenPort" .  }}
+
+      querier:
+        remote_read:
+          query_address: http://{{ template "mimir.fullname" . }}-query-frontend.{{ .Release.Namespace }}.svc:{{ include "mimir.serverHttpListenPort" .  }}/prometheus
+        proxy_bad_requests: false
+
+        schemas:
+          default_storage_schemas_file: /etc/graphite-proxy/storage-schemas.conf
+          default_storage_aggregations_file: /etc/graphite-proxy/storage-aggregations.conf
+        aggregation_cache:
+          memcached:
+            addresses: dnssrvnoa+{{ template "mimir.fullname" . }}-gr-aggr-cache.{{ .Release.Namespace}}.svc:11211
+            timeout: 1s
+        metric_name_cache:
+          memcached:
+            addresses: dnssrvnoa+{{ template "mimir.fullname" . }}-gr-metricname-cache.{{ .Release.Namespace}}.svc:11211
+            timeout: 1s
+    {{- end}}

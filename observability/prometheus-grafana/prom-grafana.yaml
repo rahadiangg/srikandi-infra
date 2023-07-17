@@ -1,0 +1,146 @@
+## Configuration for alertmanager
+## ref: https://prometheus.io/docs/alerting/alertmanager/
+##
+alertmanager:
+  alertmanagerSpec:
+    externalUrl: 
+    nodeSelector:
+      cloud.google.com/gke-nodepool: default-pool
+
+    replicas: 1
+
+## Manages Prometheus and Alertmanager components
+##
+prometheusOperator:
+  nodeSelector:
+    cloud.google.com/gke-nodepool: default-pool
+
+## Configuration for grafana subchart
+##
+grafana:
+  ingress:
+    ## If true, Grafana Ingress will be created
+    ##
+    enabled: false
+    # annotations:
+    #   kubernetes.io/ingress.class: gce
+    #   # kubernetes.io/ingress.allow-http: "false"
+    #   cert-manager.io/cluster-issuer: letsencrypt-prod
+    
+    # hosts:
+    #   - grafana.srikandi-app.rahadian.dev
+    
+    # tls:
+    #   - secretName: grafana-general-tls
+    #     hosts:
+    #       - grafana.srikandi-app.rahadian.dev
+
+  admin:
+    ## Name of the secret. Can be templated.
+    existingSecret: "grafana-credentials"
+    userKey: user
+    passwordKey: password
+  nodeSelector:
+    cloud.google.com/gke-nodepool: default-pool
+
+  env:
+    JAEGER_AGENT_PORT: 5775
+
+  replicas: 1
+
+  persistence:
+    type: pvc
+    enabled: true
+    storageClassName: standard
+    accessModes:
+      - ReadWriteOnce
+    size: 3Gi
+
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          type: prometheus
+          url: http://prom-stack-kube-prometheus-prometheus.observability:9090
+          access: proxy
+          isDefault: true
+        - name: Loki
+          type: loki
+          url: http://loki-stack.observability:3100
+          access: proxy
+
+  grafana.ini:
+    server:
+      url: https://grafana.srikandi-app.rahadian.dev
+      root_url: https://grafana.srikandi-app.rahadian.dev
+  #   users:
+  #     auto_assign_org_role: Editor # Editor will be assigned manually for all engineering leaders
+  #   auth.google:
+  #     enabled: true
+  #     client_id: 936820813372-khcl4np8si5nbgf7gv19i4kvve6j3e41.apps.googleusercontent.com
+  #     client_secret: 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
+  #     auth_url: https://accounts.google.com/o/oauth2/auth
+  #     token_url: https://accounts.google.com/o/oauth2/token
+  #     allowed_domains: gotoko.co.id
+  #     allow_sign_up: true
+  #   unified_alerting:
+  #     enabled: true
+
+## Configuration for kube-state-metrics subchart
+##
+kube-state-metrics:
+  nodeSelector:
+    cloud.google.com/gke-nodepool: default-pool
+
+## Deploy a Prometheus instance
+##
+prometheus:
+  prometheusSpec:
+    nodeSelector:
+      cloud.google.com/gke-nodepool: default-pool
+
+    replicas: 1
+
+    serviceMonitorSelectorNilUsesHelmValues: false # must be false if have another custom serviceMonitor
+
+    retention: 14d
+    walCompression: true
+
+    enableAdminAPI: true
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 20Gi
+
+## Others
+##
+coreDns:
+  enabled: true
+
+kubeDns:
+  enabled: false
+
+kubeScheduler:
+  enabled: false
+
+kubeProxy:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+prometheus-node-exporter:
+  resources:
+    limits:
+      cpu: 15m
+      memory: 32Mi
+    requests:
+      cpu: 10m
+      memory: 16Mi

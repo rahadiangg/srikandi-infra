@@ -1,0 +1,13 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana-cert-rahadian-dev
+  namespace: istio-system # same with ingress gateway namespace
+spec:
+  secretName: grafana-cert-rahadian-dev
+  dnsNames:
+    - grafana-srikandi-app.rahadian.dev
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+    group: cert-manager.io

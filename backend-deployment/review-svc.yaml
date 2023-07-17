@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: review-canary-3.0.0 # nama deployment beda
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      type: canary-3.0.0 #tambahan label canary
+  template:
+    metadata:
+      labels:
+        type: canary-3.0.0 # tambahan label canary
+        app: review # match dengan label service
+        version: 3.0.0 # versi 3
+    spec:
+      containers:
+      - name: review
+        image: rahadiangg/demo-istio:review-svc-3.0.0 # versi 3
+        resources:
+          limits:
+            memory: "20Mi"
+            cpu: "20m"
+        ports:
+        - containerPort: 8000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: review
+  namespace: default
+spec:
+  selector:
+    app: review
+  ports:
+  - port: 8000
+    targetPort: 8000
+    # untuk mendemokan Kiali dapat mengecek konfigurasi yang salah
+    name: http 
+
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: review-virtualservice
+  namespace: default
+spec:
+  hosts:
+  - review.default.svc.cluster.local
+  http:
+  - name: "route full"
+    route:
+    - destination:
+        host: review.default.svc.cluster.local # disarankan menggunakan format DNS full (FQDN)
+      weight: 100 # persentase traffic

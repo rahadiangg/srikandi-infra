@@ -1,0 +1,15 @@
+auth:
+  rootPassword: "mantapDjiwa"
+  database: "srikandi-app"
+
+primary:
+  persistence:
+    size: 2Gi
+
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1024Mi
+    requests:
+      cpu: 512m
+      memory: 512Mi

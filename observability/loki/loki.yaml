@@ -1,0 +1,122 @@
+loki:
+  enabled: true
+  isDefault: true
+
+  nodeSelector:
+    cloud.google.com/gke-nodepool: default-pool
+
+  replicas: 3
+
+  env:
+    - name: GOOGLE_APPLICATION_CREDENTIALS
+      value: /etc/secrets/gke-demo-loki.json
+    - name: JAEGER_AGENT_PORT
+      value: "5775"
+
+  extraVolumes:
+    - name: loki-gcs
+      secret:
+        secretName: loki-gcs-sa
+    # - name: loki-alert-rules
+    #   configMap:
+    #     name: loki-alert-rules
+
+  extraVolumeMounts:
+    - name: loki-gcs
+      mountPath: /etc/secrets
+    # - name: loki-alert-rules
+    #   mountPath: /tmp/rules/fake/loki-alert-rules.yaml
+    #   subPath: loki-alert-rules.yaml
+
+  persistence:
+    enabled: true
+    storageClassName: standard
+    accessModes:
+    - ReadWriteOnce
+    size: 10Gi
+
+  # Loki configuration detail can be found here
+  # https://grafana.com/docs/loki/latest/configuration/
+  #
+  config:
+    auth_enabled: false
+
+    ruler:
+      storage:
+        type: local
+        local:
+          directory: /tmp/rules
+      rule_path: /tmp/scratch
+      alertmanager_url: http://prom-stack-prometheus-alertmanager.observability:9093
+      ring:
+        kvstore:
+          store: inmemory
+      enable_api: true
+
+    common:
+      path_prefix: /data/loki
+      replication_factor: 1
+
+    # References:
+    # - https://grafana.com/docs/loki/latest/operations/storage/boltdb-shipper/
+
+    schema_config:
+      configs:
+        - from: 2022-06-01
+          store: boltdb-shipper
+          object_store: gcs
+          schema: v11
+          index:
+            prefix: index_loki_
+            period: 24h
+          chunks:
+            prefix: chunk_loki_
+            period: 24h
+
+    storage_config:
+      boltdb_shipper:
+        shared_store: gcs
+        active_index_directory: /data/loki/index_active
+        cache_location: /data/loki/index_cache
+        cache_ttl: 24h
+        resync_interval: 5m
+      gcs:
+        bucket_name: gke-demo-loki
+
+    compactor:
+      working_directory: /data/loki/compactor
+      shared_store: gcs
+      shared_store_key_prefix: loki_compactor_index/
+      # retention_enabled: true
+      # retention_delete_delay: 2h
+      # retention_delete_worker_count: 10
+
+    table_manager:
+      retention_deletes_enabled: true
+      retention_period: 720h
+
+    limits_config:
+      enforce_metric_name: false
+      reject_old_samples: true
+      reject_old_samples_max_age: 48h
+
+promtail:
+  enabled: true
+  config:
+    lokiAddress: http://{{ .Release.Name }}:3100/loki/api/v1/push
+
+fluent-bit:
+  enabled: false
+
+grafana:
+  enabled: false
+
+prometheus:
+  enabled: false
+  isDefault: false
+
+filebeat:
+  enabled: false
+
+logstash:
+  enabled: false
